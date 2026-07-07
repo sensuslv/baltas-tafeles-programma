@@ -1,0 +1,73 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install Project Dependencies
+      run: npm install
+
+    - name: Inject Electron Support
+      shell: bash
+      run: |
+        npm install electron electron-builder --save-dev
+        
+        # Izveido palaišanas failu Electron karkasam
+        cat << 'EOF' > main.js
+        const { app, BrowserWindow } = require('electron');
+        const path = require('path');
+        function createWindow () {
+          const win = new BrowserWindow({
+            width: 1200,
+            height: 800,
+            autoHideMenuBar: true,
+            webPreferences: { nodeIntegration: false }
+          });
+          win.loadFile(path.join(__dirname, 'dist/index.html'));
+        }
+        app.whenReady().then(createWindow);
+        app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+        EOF
+        
+        # Atjaunina package.json failu ar nepieciešamajiem iestatījumiem
+        node -e "
+        const fs = require('fs');
+        const p = JSON.parse(fs.readFileSync('package.json'));
+        p.main = 'main.js';
+        p.build = {
+          appId: 'com.baltatafele.app',
+          win: { target: 'nsis' },
+          directories: { output: 'dist-electron' }
+        };
+        fs.writeFileSync('package.json', JSON.stringify(p, null, 2));
+        "
+
+    - name: Build Web App (Lovable code)
+      run: npm run build
+
+    - name: Package Windows Installer (.exe)
+      run: npx electron-builder build --windows
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Installer Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-Whiteboard-Installer
+        path: dist-electron/*.exe
