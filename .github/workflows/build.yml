@@ -28,7 +28,7 @@ jobs:
       run: |
         npm install electron electron-builder --save-dev
         
-        # Izveido palaišanas failu Electron karkasam
+       # Izveido palaišanas failu Electron karkasam
         cat << 'EOF' > main.js
         const { app, BrowserWindow } = require('electron');
         const path = require('path');
@@ -50,6 +50,9 @@ jobs:
         const fs = require('fs');
         const p = JSON.parse(fs.readFileSync('package.json'));
         p.main = 'main.js';
+        if (!p.version) p.version = '1.0.0';
+        if (!p.author) p.author = 'Baltas Tafeles Izstradatajs';
+        if (!p.description) p.description = 'Baltas tafeles programma';
         p.build = {
           appId: 'com.baltatafele.app',
           win: { target: 'nsis' },
