@@ -18,48 +18,37 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: 24
-  
 
     - name: Install Project Dependencies
       run: npm install
 
     - name: Inject Electron Support
-      shell: bash
+      shell: pwsh
       run: |
         npm install electron electron-builder --save-dev
         
-       # Izveido palaišanas failu Electron karkasam
-        cat << 'EOF' > main.js
-        const { app, BrowserWindow } = require('electron');
-        const path = require('path');
-        function createWindow () {
-          const win = new BrowserWindow({
-            width: 1200,
-            height: 800,
-            autoHideMenuBar: true,
-            webPreferences: { nodeIntegration: false }
-          });
-          win.loadFile(path.join(__dirname, 'dist/index.html'));
-        }
-        app.whenReady().then(createWindow);
-        app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-        EOF
+        # Izveido main.js failu rindinu pa rindinai, lai nebutu citu simbolu kludu
+        "const { app, BrowserWindow } = require('electron');" | Out-File -FilePath main.js -Encoding utf8
+        "const path = require('path');" | Add-Content -Path main.js
+        "function createWindow () {" | Add-Content -Path main.js
+        "  const win = new BrowserWindow({ width: 1200, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false } });" | Add-Content -Path main.js
+        "  win.loadFile(path.join(__dirname, 'dist/index.html'));" | Add-Content -Path main.js
+        "}" | Add-Content -Path main.js
+        "app.whenReady().then(createWindow);" | Add-Content -Path main.js
+        "app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });" | Add-Content -Path main.js
         
-        # Atjaunina package.json failu ar nepieciešamajiem iestatījumiem
-        node -e "
-        const fs = require('fs');
-        const p = JSON.parse(fs.readFileSync('package.json'));
-        p.main = 'main.js';
-        if (!p.version) p.version = '1.0.0';
-        if (!p.author) p.author = 'Baltas Tafeles Izstradatajs';
-        if (!p.description) p.description = 'Baltas tafeles programma';
-        p.build = {
-          appId: 'com.baltatafele.app',
-          win: { target: 'nsis' },
-          directories: { output: 'dist-electron' }
-        };
-        fs.writeFileSync('package.json', JSON.stringify(p, null, 2));
-        "
+        # Izveido update-package.js failu package.json labosanai
+        "const fs = require('fs');" | Out-File -FilePath update-package.js -Encoding utf8
+        "const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));" | Add-Content -Path update-package.js
+        "p.main = 'main.js';" | Add-Content -Path update-package.js
+        "p.version = p.version || '1.0.0';" | Add-Content -Path update-package.js
+        "p.author = p.author || 'Baltas Tafeles Izstradatajs';" | Add-Content -Path update-package.js
+        "p.description = p.description || 'Baltas tafeles programma';" | Add-Content -Path update-package.js
+        "p.build = { appId: 'com.baltatafele.app', win: { target: 'nsis' }, directories: { output: 'dist-electron' } };" | Add-Content -Path update-package.js
+        "fs.writeFileSync('package.json', JSON.stringify(p, null, 2), 'utf8');" | Add-Content -Path update-package.js
+        
+        # Palatiz skriptu
+        node update-package.js
 
     - name: Build Web App (Lovable code)
       run: npm run build
