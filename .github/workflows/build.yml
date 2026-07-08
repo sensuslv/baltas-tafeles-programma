@@ -17,41 +17,57 @@ jobs:
     - name: Install Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 24
+        node-version: 20 # Node 20 LTS ir stabilāka un saderīgāka ar electron-builder
 
     - name: Install Project Dependencies
       run: npm install
+
+    - name: Build Web App (Lovable code)
+      run: npm run build
 
     - name: Inject Electron Support
       shell: pwsh
       run: |
         npm install electron electron-builder --save-dev
         
-        # Izveido main.js failu rindinu pa rindinai, lai nebutu citu simbolu kludu
-        "const { app, BrowserWindow } = require('electron');" | Out-File -FilePath main.js -Encoding utf8
-        "const path = require('path');" | Add-Content -Path main.js
-        "function createWindow () {" | Add-Content -Path main.js
-        "  const win = new BrowserWindow({ width: 1200, height: 800, autoHideMenuBar: true, webPreferences: { nodeIntegration: false } });" | Add-Content -Path main.js
-        "  win.loadFile(path.join(__dirname, 'dist/index.html'));" | Add-Content -Path main.js
-        "}" | Add-Content -Path main.js
-        "app.whenReady().then(createWindow);" | Add-Content -Path main.js
-        "app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });" | Add-Content -Path main.js
+        # Izveido main.js failu vienā paņēmienā ar drošu UTF-8 kodējumu
+        $mainJs = @"
+        const { app, BrowserWindow } = require('electron');
+        const path = require('path');
+        function createWindow () {
+          const win = new BrowserWindow({ 
+            width: 1200, 
+            height: 800, 
+            autoHideMenuBar: true, 
+            webPreferences: { nodeIntegration: false } 
+          });
+          win.loadFile(path.join(__dirname, 'dist/index.html'));
+        }
+        app.whenReady().then(createWindow);
+        app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+        "@
+        Set-Content -Path main.js -Value $mainJs -Encoding utf8
         
-        # Izveido update-package.js failu package.json labosanai
-        "const fs = require('fs');" | Out-File -FilePath update-package.js -Encoding utf8
-        "const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));" | Add-Content -Path update-package.js
-        "p.main = 'main.js';" | Add-Content -Path update-package.js
-        "p.version = p.version || '1.0.0';" | Add-Content -Path update-package.js
-        "p.author = p.author || 'Baltas Tafeles Izstradatajs';" | Add-Content -Path update-package.js
-        "p.description = p.description || 'Baltas tafeles programma';" | Add-Content -Path update-package.js
-        "p.build = { appId: 'com.baltatafele.app', win: { target: 'nsis' }, directories: { output: 'dist-electron' } };" | Add-Content -Path update-package.js
-        "fs.writeFileSync('package.json', JSON.stringify(p, null, 2), 'utf8');" | Add-Content -Path update-package.js
+        # Izveido update-package.js failu vienā paņēmienā
+        $updatePackageJs = @"
+        const fs = require('fs');
+        const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        p.main = 'main.js';
+        p.version = p.version || '1.0.0';
+        p.author = p.author || 'Baltas Tafeles Izstradatajs';
+        p.description = p.description || 'Baltas tafeles programma';
+        p.build = { 
+          appId: 'com.baltatafele.app', 
+          win: { target: 'nsis' }, 
+          directories: { output: 'dist-electron' },
+          files: ['dist/**/*', 'main.js', 'package.json']
+        };
+        fs.writeFileSync('package.json', JSON.stringify(p, null, 2), 'utf8');
+        "@
+        Set-Content -Path update-package.js -Value $updatePackageJs -Encoding utf8
         
-        # Palatiz skriptu
+        # Palaiž skriptu, lai atjauninātu package.json
         node update-package.js
-
-    - name: Build Web App (Lovable code)
-      run: npm run build
 
     - name: Package Windows Installer (.exe)
       run: npx electron-builder build --windows
